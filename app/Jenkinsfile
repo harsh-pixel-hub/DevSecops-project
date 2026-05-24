@@ -47,6 +47,29 @@ pipeline {
             }
         }
 
+        stage('Ensure SonarQube') {
+            steps {
+                sh '''
+                    SONAR_URL="http://192.168.136.133:9000"
+                    if ! curl -fsS "$SONAR_URL/api/system/status" >/dev/null 2>&1; then
+                        docker start sonar || docker run -d --name sonar -p 9000:9000 sonarqube:lts-community
+                    fi
+
+                    for i in $(seq 1 90); do
+                        STATUS="$(curl -fsS "$SONAR_URL/api/system/status" 2>/dev/null | sed -n 's/.*"status":"\\([^"]*\\)".*/\\1/p' || true)"
+                        echo "SonarQube status: ${STATUS:-waiting}"
+                        if [ "$STATUS" = "UP" ]; then
+                            exit 0
+                        fi
+                        sleep 5
+                    done
+
+                    echo "SonarQube did not become UP in time"
+                    exit 1
+                '''
+            }
+        }
+
         stage('SonarQube Analysis') {
             steps {
                 dir(env.APP_DIR) {
