@@ -1,0 +1,137 @@
+pipeline {
+    agent any
+
+    tools {
+        maven 'Maven'
+    }
+
+    environment {
+        SCANNER_HOME = tool 'sonarqube'
+        APP_DIR = 'app'
+        IMAGE_REPO = 'devsecops-app'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Application') {
+            steps {
+                dir(env.APP_DIR) {
+                    sh 'mvn clean package -DskipTests'
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                dir(env.APP_DIR) {
+                    withSonarQubeEnv('sonar-server') {
+                        sh '''
+                            $SCANNER_HOME/bin/sonar-scanner \
+                            -Dsonar.projectKey=DevSecOps \
+                            -Dsonar.projectName=DevSecOps \
+                            -Dsonar.projectBaseDir=. \
+                            -Dsonar.sources=src/main/java \
+                            -Dsonar.java.binaries=target/classes
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Trivy Filesystem Scan') {
+            steps {
+                dir(env.APP_DIR) {
+                    sh 'trivy fs --exit-code 0 --severity HIGH,CRITICAL .'
+                }
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                dir(env.APP_DIR) {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub',
+                        usernameVariable: 'DOCKER_USERNAME',
+                        passwordVariable: 'DOCKER_PASSWORD'
+                    )]) {
+                        sh 'docker build -t $DOCKER_USERNAME/$IMAGE_REPO:latest .'
+                    }
+                }
+            }
+        }
+
+        stage('Trivy Image Scan') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub',
+                    usernameVariable: 'DOCKER_USERNAME',
+                    passwordVariable: 'DOCKER_PASSWORD'
+                )]) {
+                    sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL $DOCKER_USERNAME/$IMAGE_REPO:latest'
+                }
+            }
+        }
+
+        stage('Docker Push') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub',
+                    usernameVariable: 'DOCKER_USERNAME',
+                    passwordVariable: 'DOCKER_PASSWORD'
+                )]) {
+                    sh '''
+                        echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+                        docker push "$DOCKER_USERNAME/$IMAGE_REPO:latest"
+                    '''
+                }
+            }
+        }
+
+        stage('Kubernetes Deploy') {
+            steps {
+                dir(env.APP_DIR) {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub',
+                        usernameVariable: 'DOCKER_USERNAME',
+                        passwordVariable: 'DOCKER_PASSWORD'
+                    )]) {
+                        sh '''
+                            sed -i "s#image: .*devsecops-app:.*#image: $DOCKER_USERNAME/$IMAGE_REPO:latest#" deployment.yaml
+                            kubectl apply -f deployment.yaml
+                            kubectl apply -f service.yaml
+                            kubectl rollout status deployment/devsecops-app --timeout=120s
+                            kubectl get service devsecops-service
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Monitoring Setup') {
+            steps {
+                sh '''
+                    kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+                    if command -v helm >/dev/null 2>&1; then
+                        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
+                        helm repo update
+                        helm upgrade --install prometheus prometheus-community/kube-prometheus-stack -n monitoring
+                        kubectl get pods -n monitoring
+                    else
+                        echo "Helm is not installed on this Jenkins agent. Install Helm to enable Prometheus and Grafana setup."
+                    fi
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'docker logout || true'
+        }
+    }
+}
