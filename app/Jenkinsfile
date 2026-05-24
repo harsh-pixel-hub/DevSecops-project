@@ -74,12 +74,15 @@ pipeline {
             steps {
                 dir(env.APP_DIR) {
                     withSonarQubeEnv('Sonarqube') {
-                        sh '''
-                            mvn sonar:sonar \
-                            -Dsonar.projectKey=DevSecOps \
-                            -Dsonar.projectName=DevSecOps \
-                            -Dsonar.java.binaries=target/classes
-                        '''
+                        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                            sh '''
+                                mvn sonar:sonar \
+                                -Dsonar.projectKey=DevSecOps \
+                                -Dsonar.projectName=DevSecOps \
+                                -Dsonar.java.binaries=target/classes \
+                                -Dsonar.login=$SONAR_TOKEN
+                            '''
+                        }
                     }
                 }
             }
@@ -97,7 +100,7 @@ pipeline {
             steps {
                 dir(env.APP_DIR) {
                     withCredentials([usernamePassword(
-                        credentialsId: 'dockerhub',
+                        credentialsId: 'dockerhub-user-id',
                         usernameVariable: 'DOCKER_USERNAME',
                         passwordVariable: 'DOCKER_PASSWORD'
                     )]) {
@@ -110,7 +113,7 @@ pipeline {
         stage('Trivy Image Scan') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub',
+                    credentialsId: 'dockerhub-user-id',
                     usernameVariable: 'DOCKER_USERNAME',
                     passwordVariable: 'DOCKER_PASSWORD'
                 )]) {
@@ -122,7 +125,7 @@ pipeline {
         stage('Docker Push') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub',
+                    credentialsId: 'dockerhub-user-id',
                     usernameVariable: 'DOCKER_USERNAME',
                     passwordVariable: 'DOCKER_PASSWORD'
                 )]) {
@@ -138,7 +141,7 @@ pipeline {
             steps {
                 dir(env.APP_DIR) {
                     withCredentials([usernamePassword(
-                        credentialsId: 'dockerhub',
+                        credentialsId: 'dockerhub-user-id',
                         usernameVariable: 'DOCKER_USERNAME',
                         passwordVariable: 'DOCKER_PASSWORD'
                     )]) {
