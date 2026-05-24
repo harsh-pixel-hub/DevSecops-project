@@ -6,7 +6,6 @@ pipeline {
     }
 
     environment {
-        SCANNER_HOME = tool 'sonarqube'
         APP_DIR = 'app'
         IMAGE_REPO = 'devsecops-app'
     }
@@ -31,11 +30,9 @@ pipeline {
                 dir(env.APP_DIR) {
                     withSonarQubeEnv('sonar-server') {
                         sh '''
-                            $SCANNER_HOME/bin/sonar-scanner \
+                            mvn sonar:sonar \
                             -Dsonar.projectKey=DevSecOps \
                             -Dsonar.projectName=DevSecOps \
-                            -Dsonar.projectBaseDir=. \
-                            -Dsonar.sources=src/main/java \
                             -Dsonar.java.binaries=target/classes
                         '''
                     }
@@ -129,9 +126,4 @@ pipeline {
         }
     }
 
-    post {
-        always {
-            sh 'docker logout || true'
-        }
-    }
 }
