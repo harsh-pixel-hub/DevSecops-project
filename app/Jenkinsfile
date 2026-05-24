@@ -50,7 +50,7 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 dir(env.APP_DIR) {
-                    withSonarQubeEnv('sonar-server') {
+                    withSonarQubeEnv('Sonarqube') {
                         sh '''
                             mvn sonar:sonar \
                             -Dsonar.projectKey=DevSecOps \
