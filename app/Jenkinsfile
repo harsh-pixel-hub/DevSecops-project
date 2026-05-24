@@ -7,7 +7,7 @@ pipeline {
 
     environment {
         APP_DIR = 'app'
-        IMAGE_REPO = 'devsecops-app'
+        IMAGE_NAME = 'harsh790/devsecops-app'
     }
 
     stages {
@@ -107,10 +107,10 @@ pipeline {
                 dir(env.APP_DIR) {
                     withCredentials([usernamePassword(
                         credentialsId: 'dockerhub-user-id',
-                        usernameVariable: 'DOCKER_USERNAME',
+                        usernameVariable: 'DOCKER_CREDENTIAL_USERNAME',
                         passwordVariable: 'DOCKER_PASSWORD'
                     )]) {
-                        sh 'docker build -t $DOCKER_USERNAME/$IMAGE_REPO:latest .'
+                        sh 'docker build -t $IMAGE_NAME:latest .'
                     }
                 }
             }
@@ -120,10 +120,10 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-user-id',
-                    usernameVariable: 'DOCKER_USERNAME',
+                    usernameVariable: 'DOCKER_CREDENTIAL_USERNAME',
                     passwordVariable: 'DOCKER_PASSWORD'
                 )]) {
-                    sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL --scanners vuln --pkg-types os $DOCKER_USERNAME/$IMAGE_REPO:latest'
+                    sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL --scanners vuln --pkg-types os $IMAGE_NAME:latest'
                 }
             }
         }
@@ -132,12 +132,12 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-user-id',
-                    usernameVariable: 'DOCKER_USERNAME',
+                    usernameVariable: 'DOCKER_CREDENTIAL_USERNAME',
                     passwordVariable: 'DOCKER_PASSWORD'
                 )]) {
                     sh '''
-                        echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-                        docker push "$DOCKER_USERNAME/$IMAGE_REPO:latest"
+                        echo "$DOCKER_PASSWORD" | docker login -u harsh790 --password-stdin
+                        docker push "$IMAGE_NAME:latest"
                     '''
                 }
             }
@@ -148,11 +148,11 @@ pipeline {
                 dir(env.APP_DIR) {
                     withCredentials([usernamePassword(
                         credentialsId: 'dockerhub-user-id',
-                        usernameVariable: 'DOCKER_USERNAME',
+                        usernameVariable: 'DOCKER_CREDENTIAL_USERNAME',
                         passwordVariable: 'DOCKER_PASSWORD'
                     )]) {
                         sh '''
-                            sed -i "s#image: .*devsecops-app:.*#image: $DOCKER_USERNAME/$IMAGE_REPO:latest#" deployment.yaml
+                            sed -i "s#image: .*devsecops-app:.*#image: $IMAGE_NAME:latest#" deployment.yaml
                             kubectl apply -f deployment.yaml
                             kubectl apply -f service.yaml
                             kubectl rollout status deployment/devsecops-app --timeout=120s
