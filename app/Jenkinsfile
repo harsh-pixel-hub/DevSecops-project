@@ -91,8 +91,14 @@ pipeline {
         stage('Trivy Filesystem Scan') {
             steps {
                 dir(env.APP_DIR) {
-                    sh 'trivy fs --exit-code 0 --severity HIGH,CRITICAL .'
+                    sh 'trivy fs --exit-code 0 --severity HIGH,CRITICAL --scanners vuln .'
                 }
+            }
+        }
+
+        stage('Docker Cleanup') {
+            steps {
+                sh 'docker system prune -af || true'
             }
         }
 
@@ -117,7 +123,7 @@ pipeline {
                     usernameVariable: 'DOCKER_USERNAME',
                     passwordVariable: 'DOCKER_PASSWORD'
                 )]) {
-                    sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL $DOCKER_USERNAME/$IMAGE_REPO:latest'
+                    sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL --scanners vuln --pkg-types os $DOCKER_USERNAME/$IMAGE_REPO:latest'
                 }
             }
         }
